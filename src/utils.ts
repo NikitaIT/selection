@@ -1,26 +1,30 @@
 /* eslint-disable prefer-rest-params */
-function eventListener(method, elements, events, fn, options = {}) {
+import { IntersectsMode } from './IntersectsMode';
 
-    // Normalize array
-    if (elements instanceof HTMLCollection || elements instanceof NodeList) {
-        elements = Array.from(elements);
-    } else if (!Array.isArray(elements)) {
-        elements = [elements];
-    }
-
-    if (!Array.isArray(events)) {
-        events = [events];
-    }
-
-    for (const element of elements) {
-        for (const event of events) {
-            element[method](event, fn, {capture: false, ...options});
+function eventListener<T extends HTMLCollection | NodeList | HTMLElement[]>(method: any, elements: T, events: MouseEvent[], fn: any, options: any = {}) {
+    const normalizedEvents = normalizeArray(events);
+    const normalizedElements = normalizeDomArray(elements);
+    for (const element of normalizedElements) {
+        for (const event of normalizedEvents) {
+            (element as any)[method](event, fn, {capture: false, ...options});
         }
     }
 
     return Array.prototype.slice.call(arguments, 1);
 }
 
+function normalizeDomArray(elements: HTMLCollection | NodeList | HTMLElement[]) {
+    if (elements instanceof HTMLCollection || elements instanceof NodeList) {
+        return Array.from(elements);
+    }
+    return normalizeArray(elements);
+}
+function normalizeArray<T>(elements: T | T[]): T[] {
+    if (!Array.isArray(elements)) {
+        return [elements];
+    }
+    return elements;
+}
 /**
  * Add event(s) to element(s).
  * @param elements DOM-Elements
@@ -41,8 +45,11 @@ export const on = eventListener.bind(null, 'addEventListener');
  */
 export const off = eventListener.bind(null, 'removeEventListener');
 
-const unitify = (val, unit = 'px') => typeof val === 'number' ? val + unit : val;
+export const unitify = <T extends CSSStyleDeclarationWithNumber[keyof CSSStyleDeclarationWithNumber]>(val: T, unit = 'px') => typeof val === 'number' ? val + unit : val;
 
+type CSSStyleDeclarationWithNumber = {
+    [P in keyof CSSStyleDeclaration]?: CSSStyleDeclaration[P] | number;
+};
 /**
  * Add css to a DOM-Element or returns the current
  * value of a property.
@@ -52,21 +59,24 @@ const unitify = (val, unit = 'px') => typeof val === 'number' ? val + unit : val
  * @param val The value for a single attribute.
  * @returns {*}
  */
-export function css(el, attr, val) {
+export function css<T extends keyof CSSStyleDeclarationWithNumber>(el: ElementCSSInlineStyle, attr: T, val: CSSStyleDeclarationWithNumber[T]): void;
+export function css(el: ElementCSSInlineStyle, attr: CSSStyleDeclarationWithNumber): void;
+export function css<T extends keyof CSSStyleDeclarationWithNumber>(el: ElementCSSInlineStyle, attr: T | CSSStyleDeclarationWithNumber, val?: CSSStyleDeclarationWithNumber[T]): void {
     const style = el && el.style;
     if (style) {
         if (typeof attr === 'object') {
 
             for (const [key, value] of Object.entries(attr)) {
-                style[key] = unitify(value);
+                style[key as any] = unitify(value);
             }
 
         } else if (val && typeof attr === 'string') {
-            style[attr] = unitify(val);
+            style[attr as any] = unitify(val);
         }
     }
 }
 
+export type BoundingClientRect = ClientRect | DOMRect;
 /**
  * Check if two DOM-Elements intersects each other.
  * @param a BoundingClientRect of the first element.
@@ -74,9 +84,9 @@ export function css(el, attr, val) {
  * @param mode Options are center, cover or touch.
  * @returns {boolean} If both elements intersects each other.
  */
-export function intersects(a, b, mode) {
-    switch (mode || 'touch') {
-        case 'center': {
+export function intersects(a: BoundingClientRect, b: BoundingClientRect, mode?: IntersectsMode) {
+    switch (mode || IntersectsMode.touch) {
+        case IntersectsMode.center: {
             const bxc = b.left + b.width / 2;
             const byc = b.top + b.height / 2;
 
@@ -85,13 +95,13 @@ export function intersects(a, b, mode) {
                 && byc >= a.top
                 && byc <= a.bottom;
         }
-        case 'cover': {
+        case IntersectsMode.cover: {
             return b.left >= a.left
                 && b.top >= a.top
                 && b.right <= a.right
                 && b.bottom <= a.bottom;
         }
-        case 'touch': {
+        case IntersectsMode.touch: {
             return a.right >= b.left
                 && a.left <= b.right
                 && a.bottom >= b.top
@@ -108,31 +118,28 @@ export function intersects(a, b, mode) {
  * @param selector The selector or an Array of selectors.
  * @returns {Array} Array of DOM-Nodes.
  */
-export function selectAll(selector, doc = document) {
+export function selectAll(selector: string | HTMLElement | Array<string | HTMLElement>, doc: Document = document): (HTMLElement)[] {
     if (!Array.isArray(selector)) {
         selector = [selector];
     }
 
-    const nodes = [];
-    for (let i = 0, l = selector.length; i < l; i++) {
-        const item = selector[i];
-
+    return selector.flatMap(item => {
         if (typeof item === 'string') {
-            nodes.push(...doc.querySelectorAll(item));
-        } else if (item instanceof doc.defaultView.HTMLElement) {
-            nodes.push(item);
+            return Array.from(doc.querySelectorAll(item));
+        } else if (item instanceof (doc.defaultView as any).HTMLElement) {
+            return item;
         }
-    }
-
-    return nodes;
+    });
 }
-
+type MouseEventMaybePath = MouseEvent & {
+    path?: HTMLElement[];
+}
 /**
  * Polyfill for safari & firefox for the eventPath event property.
  * @param evt The event object.
  * @return [String] event path.
  */
-export function eventPath(evt) {
+export function eventPath(evt: MouseEventMaybePath) {
     let path = evt.path || (evt.composedPath && evt.composedPath());
 
     if (path) {
@@ -140,7 +147,7 @@ export function eventPath(evt) {
     }
 
     let el = evt.target;
-    for (path = [el]; (el = el.parentElement);) {
+    for (path = [el]; (el = (el as HTMLElement).parentElement);) {
         path.push(el);
     }
 
@@ -151,7 +158,7 @@ export function eventPath(evt) {
 /**
  * Removes an element from an Array.
  */
-export function removeElement(arr, el) {
+export function removeElement<T>(arr: T[], el: T) {
     const index = arr.indexOf(el);
 
     if (~index) {
@@ -159,12 +166,12 @@ export function removeElement(arr, el) {
     }
 }
 
-export function simplifyEvent(evt) {
-    const tap = (evt.touches && evt.touches[0] || evt);
+export function simplifyEvent(evt: MouseEvent | TouchEvent) {
+    const tap = ((evt as TouchEvent).touches && (evt as TouchEvent).touches[0] || evt);
     return {
         tap,
-        x: tap.clientX,
-        y: tap.clientY,
-        target: tap.target
+        x: (tap as MouseEvent).clientX,
+        y: (tap as MouseEvent).clientY,
+        target: (tap.target as HTMLElement)
     };
 }

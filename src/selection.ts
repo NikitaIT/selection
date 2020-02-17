@@ -1,19 +1,136 @@
-import {css, eventPath, intersects, off, on, removeElement, selectAll, simplifyEvent} from './utils';
-import {version}                                                                      from '../package';
+import { IntersectsMode } from './IntersectsMode';
+import { BoundingClientRect, css, eventPath, intersects, off, on, removeElement, selectAll, simplifyEvent, unitify } from './utils';
+// @ts-ignore
+//import {version} from '../package';
 
 // Some var shorting for better compression and readability
 const {abs, max, min, round, ceil} = Math;
-const preventDefault = e => e.preventDefault();
+const preventDefault = (e: Event) => e.preventDefault();
 
-function Selection(options = {}) {
+type KeepSelectionStore = {
+    _stored: (HTMLElement)[],
+    _selectables: (HTMLElement)[],
+    _selected: (HTMLElement)[], // Currently touched elements
+    _changed: {
+        added: (HTMLElement)[],  // Added elements since last selection
+        removed: (HTMLElement)[] // Removed elements since last selection
+    },
+};
 
-    const that = {
+function getKeepSelectionStore(): KeepSelectionStore {
+    return {
+        _stored: [],
+        _selectables: [],
+        _selected: [], // Currently touched elements
+        _changed: {
+            added: [],  // Added elements since last selection
+            removed: [] // Removed elements since last selection
+        },
+    };
+}
 
-        options: Object.assign({
+type EvenlistenerStore = {
+        beforestart: any[],
+        start: any[],
+        move: any[],
+        stop: any[]
+};
+
+// Evenlistener name: [callbacks]
+function getEvenlistenerStore(): EvenlistenerStore {
+    return {
+            beforestart: [],
+            start: [],
+            move: [],
+            stop: []
+        }
+}
+export const enum TapMode {
+    native = 'native',
+    touch = 'touch'
+}
+type Point = { x: number, y: number };
+function isPoint(startThreshold: number | Point): startThreshold is Point {
+    return typeof startThreshold === 'object';
+}
+type SelectionOptions = {
+    class: string,
+    frame: Document,
+    mode: IntersectsMode,
+    tapMode: TapMode,
+    startThreshold: number | Point,
+    singleClick: boolean,
+    disableTouch: boolean,
+
+    selectables: any[],
+    scrollSpeedDivider: number,
+    manualScrollSpeed: number,
+
+    startareas: string[],
+    boundaries: string[],
+    selectionAreaContainer: string,
+};
+type SelectionData = {
+    options: SelectionOptions
+    _eventListener: EvenlistenerStore,
+
+    // Create area element
+    _area: HTMLElement | null,
+    _areaDomRect: BoundingClientRect | null, // Caches the position of the selection-area
+    _clippingElement:  HTMLElement |null,
+    _boundaries: (Element | HTMLElement)[];
+    _targetContainer: (Element | HTMLElement) | undefined;
+    _targetBoundary: DOMRect;
+    _singleClick: boolean;
+    // Is getting set on movement. Varied.
+    _scrollAvailable: boolean,
+    _scrollSpeed: {x: number | null, y: number | null},
+    _init(): void;
+    _bindStartEvents(type: 'on' | 'off'): void;
+    _onTapStart(evt: MouseEvent): void;
+    _onSingleTap(evt: MouseEvent): boolean;
+    _delayedTapMove(evt: MouseEvent): void;
+    _onTapMove(evt: MouseEvent): void;
+    _manualScroll(evt: WheelEvent): void;
+    _redrawArea(): void;
+    _onTapStop(evt: MouseEvent, noevent?: boolean): void;
+    _updatedTouchingElements(): void;
+    _emit(event: keyof EvenlistenerStore, evt: MouseEvent): boolean;
+    on(event: keyof EvenlistenerStore, cb: any): SelectionData;
+    off(event: keyof EvenlistenerStore, cb: any): SelectionData;
+    resolveSelectables(): void;
+    keepSelection(): void;
+    clearSelection(store: boolean): void;
+    removeFromSelection(el: HTMLElement): void;
+    getSelection(): HTMLElement[];
+    cancel(keepEvent: boolean): void;
+    option<T extends keyof SelectionOptions>(name: T, value?: SelectionOptions[T]): SelectionOptions[T];
+    disable(): void;
+    destroy(): void;
+    enable(): void;
+    select(query: string | HTMLElement | (string | HTMLElement)[]): HTMLElement[];
+} & KeepSelectionStore;
+function Selection(options: Partial<SelectionOptions> = {}) {
+    const point1 = {
+        _ax1: 0,
+        _ay1: 0,
+    };
+    const point2 = {
+        _ax2: 0,
+        _ay2: 0,
+    };
+    const that: SelectionData = {
+        // >- новые?
+        _boundaries: [],
+        _targetContainer: undefined,
+        _targetBoundary: undefined as any,
+        _singleClick: false,
+        // <- новые?
+        options: {
             class: 'selection-area',
             frame: document,
-            mode: 'touch',
-            tapMode: 'native',
+            mode: IntersectsMode.touch,
+            tapMode: TapMode.native,
             startThreshold: 10,
             singleClick: true,
             disableTouch: false,
@@ -24,25 +141,12 @@ function Selection(options = {}) {
 
             startareas: ['html'],
             boundaries: ['html'],
-            selectionAreaContainer: 'body'
-        }, options),
-
-        // Store for keepSelection
-        _stored: [],
-        _selectables: [],
-        _selected: [], // Currently touched elements
-        _changed: {
-            added: [],  // Added elements since last selection
-            removed: [] // Removed elements since last selection
+            selectionAreaContainer: 'body',
+            ...options
         },
+        ...getKeepSelectionStore(),
 
-        // Evenlistener name: [callbacks]
-        _eventListener: {
-            beforestart: [],
-            start: [],
-            move: [],
-            stop: []
-        },
+        _eventListener: getEvenlistenerStore(),
 
         // Create area element
         _area: null,
@@ -53,7 +157,7 @@ function Selection(options = {}) {
         _scrollAvailable: true,
         _scrollSpeed: {x: null, y: null},
 
-        _init() {
+        _init(): void {
             const {frame} = that.options;
             that._area = frame.createElement('div');
             that._clippingElement = frame.createElement('div');
@@ -81,7 +185,7 @@ function Selection(options = {}) {
             that.enable();
         },
 
-        _bindStartEvents(type) {
+        _bindStartEvents(type: 'on' | 'off'): void {
             const {frame} = that.options;
             const fn = type === 'on' ? on : off;
             fn(frame, 'mousedown', that._onTapStart);
@@ -93,7 +197,7 @@ function Selection(options = {}) {
             }
         },
 
-        _onTapStart(evt) {
+        _onTapStart(evt: MouseEvent): void {
             const {x, y, target} = simplifyEvent(evt);
             const {startareas, boundaries, frame} = that.options;
             const targetBoundingClientRect = target.getBoundingClientRect();
@@ -120,12 +224,12 @@ function Selection(options = {}) {
             }
 
             // Area start point
-            that._ax1 = x;
-            that._ay1 = y;
+            point1._ax1 = x;
+            point1._ay1 = y;
 
             // Area end point
-            that._ax2 = 0;
-            that._ay2 = 0;
+            point2._ax2 = 0;
+            point2._ay2 = 0;
 
             // To detect single-click
             that._singleClick = true;
@@ -143,14 +247,14 @@ function Selection(options = {}) {
             evt.preventDefault();
         },
 
-        _onSingleTap(evt) {
+        _onSingleTap(evt: MouseEvent): boolean {
             const {tapMode} = that.options;
             const spl = simplifyEvent(evt);
-            let target = null;
+            let target: HTMLElement | null = null;
 
-            if (tapMode === 'native') {
+            if (tapMode === TapMode.native) {
                 target = spl.target;
-            } else if (tapMode === 'touch') {
+            } else if (tapMode ===  TapMode.touch) {
                 that.resolveSelectables();
 
                 const {x, y} = spl;
@@ -189,7 +293,9 @@ function Selection(options = {}) {
                 const reference = stored[stored.length - 1];
 
                 // Resolve correct range
-                const [preceding, following] = reference.compareDocumentPosition(target) & 4 ? [target, reference] : [reference, target];
+                const [preceding, following] = reference.compareDocumentPosition(target) & 4
+                  ? [target, reference]
+                  : [reference, target];
 
                 const rangeItems = [...that._selectables.filter(el =>
                     (el.compareDocumentPosition(preceding) & 4) &&
@@ -201,7 +307,7 @@ function Selection(options = {}) {
                 that._emit('stop', evt);
             } else {
 
-                if (that._stored.includes(target)) {
+                if (stored.includes(target)) {
                     that.removeFromSelection(target);
                 } else {
                     that.select(target);
@@ -212,15 +318,14 @@ function Selection(options = {}) {
             }
         },
 
-        _delayedTapMove(evt) {
+        _delayedTapMove(evt: MouseEvent): void {
             const {x, y} = simplifyEvent(evt);
             const {startThreshold, frame} = that.options;
-            const {_ax1, _ay1} = that; // Coordinates of first "tap"
+            const {_ax1, _ay1} = point1; // Coordinates of first "tap"
 
             // Check pixel threshold
-            const thresholdType = typeof startThreshold;
-            if ((thresholdType === 'number' && abs((x + y) - (_ax1 + _ay1)) >= startThreshold) ||
-                (thresholdType === 'object' && abs(x - _ax1) >= startThreshold.x || abs(y - _ay1) >= startThreshold.y)) {
+            if ((typeof startThreshold === 'number' && abs((x + y) - (_ax1 + _ay1)) >= startThreshold) ||
+                (isPoint(startThreshold) && (abs(x - _ax1) >= startThreshold.x || abs(y - _ay1) >= startThreshold.y))) {
                 off(frame, ['mousemove', 'touchmove'], that._delayedTapMove, {passive: false});
                 on(frame, ['mousemove', 'touchmove'], that._onTapMove, {passive: false});
 
@@ -305,13 +410,13 @@ function Selection(options = {}) {
             evt.preventDefault(); // Prevent swipe-down refresh
         },
 
-        _onTapMove(evt) {
+        _onTapMove(evt: MouseEvent): void {
             const {x, y} = simplifyEvent(evt);
             const {scrollSpeedDivider} = that.options;
             const scon = that._targetContainer;
             let ss = that._scrollSpeed;
-            that._ax2 = x;
-            that._ay2 = y;
+            point2._ax2 = x;
+            point2._ay2 = y;
 
             if (that._scrollAvailable && (ss.y !== null || ss.x !== null)) {
 
@@ -337,12 +442,12 @@ function Selection(options = {}) {
                     // Reduce velocity, use ceil in both directions to scroll at least 1px per frame
                     if (scrollY) {
                         scon.scrollTop += ceil(ss.y / scrollSpeedDivider);
-                        that._ay1 -= scon.scrollTop - scrollTop;
+                        point1._ay1 -= scon.scrollTop - scrollTop;
                     }
 
                     if (scrollX) {
                         scon.scrollLeft += ceil(ss.x / scrollSpeedDivider);
-                        that._ax1 -= scon.scrollLeft - scrollLeft;
+                        point1._ax1 -= scon.scrollLeft - scrollLeft;
                     }
 
                     /**
@@ -372,7 +477,7 @@ function Selection(options = {}) {
             evt.preventDefault(); // Prevent swipe-down refresh
         },
 
-        _manualScroll(evt) {
+        _manualScroll(evt: WheelEvent): void {
             const {manualScrollSpeed} = that.options;
 
             // Consistent scrolling speed on all browsers
@@ -386,12 +491,12 @@ function Selection(options = {}) {
             evt.preventDefault();
         },
 
-        _redrawArea() {
+        _redrawArea(): void {
             const {scrollTop, scrollHeight, clientHeight, scrollLeft, scrollWidth, clientWidth} = that._targetContainer;
             const brect = that._targetBoundary;
             const ss = that._scrollSpeed;
-            let x = that._ax2;
-            let y = that._ay2;
+            let x = point2._ax2;
+            let y = point2._ay2;
 
             if (x < brect.left) {
                 ss.x = scrollLeft ? -abs(brect.left - x) : null;
@@ -413,24 +518,23 @@ function Selection(options = {}) {
                 ss.y = null;
             }
 
-            const x3 = min(that._ax1, x);
-            const y3 = min(that._ay1, y);
-            const x4 = max(that._ax1, x);
-            const y4 = max(that._ay1, y);
+            const x3 = min(point1._ax1, x);
+            const y3 = min(point1._ay1, y);
+            const x4 = max(point1._ax1, x);
+            const y4 = max(point1._ay1, y);
             const width = x4 - x3;
             const height = y4 - y3;
 
             // It's generally faster to not use es6-templates
             Object.assign(that._area.style, {
-                transform: `translate3d(${  x3  }px, ${  y3  }px` + ', 0)',
-                width: `${width  }px`,
-                height: `${height  }px`
+                transform: `translate3d(${unitify(x3)}, ${unitify(y3)}` + ', 0)',
+                width: unitify(width),
+                height: unitify(height)
             });
-
             that._areaDomRect = new DOMRect(x3, y3, width, height);
         },
 
-        _onTapStop(evt, noevent) {
+        _onTapStop(evt: MouseEvent, noevent?: boolean): void {
             const {frame, singleClick} = that.options;
 
             // Remove event handlers
@@ -459,58 +563,32 @@ function Selection(options = {}) {
             css(that._area, 'display', 'none');
         },
 
-        _updatedTouchingElements() {
+        _updatedTouchingElements(): void {
             const {_selected, _selectables, options, _areaDomRect} = that;
             const {mode} = options;
-
-            // Update
-            const touched = [];
-            const added = [];
-            const removed = [];
-
-            // Itreate over the selectable elements
-            for (let i = 0; i < _selectables.length; i++) {
-                const node = _selectables[i];
-
-                // Check if area intersects element
-                if (intersects(_areaDomRect, node.getBoundingClientRect(), mode)) {
-
-                    // Check if the element wasn't present in the last selection.
-                    if (!_selected.includes(node)) {
-                        added.push(node);
-                    }
-
-                    touched.push(node);
-                }
+            function isAreaIntersectsElement(node: Element | HTMLElement) {
+                return intersects(_areaDomRect, node.getBoundingClientRect(), mode)
             }
-
+            const touched = _selectables.filter(isAreaIntersectsElement);
+            const added = touched.filter((node) => !_selected.includes(node));
             // Check which elements where removed since last selection
-            for (let i = 0; i < _selected.length; i++) {
-                const el = _selected[i];
-                if (!touched.includes(el)) {
-                    removed.push(el);
-                }
-            }
-
+            const removed = _selected.filter(el => !touched.includes(el));
             // Save
             that._selected = touched;
             that._changed = {added, removed};
         },
 
-        _emit(event, evt) {
-            let ok = true;
-
-            for (const listener of that._eventListener[event]) {
-                ok = listener.call(that, {
+        _emit(event: keyof EvenlistenerStore, evt: MouseEvent): boolean {
+            // isOk?
+            return that._eventListener[event].reduce((ok, listener) => {
+                return listener.call(that, {
                     inst: that,
                     area: that._area,
                     selected: that._selected.concat(that._stored),
                     changed: that._changed,
                     oe: evt
                 }) && ok;
-            }
-
-            return ok;
+            }, true);
         },
 
         /**
@@ -518,7 +596,7 @@ function Selection(options = {}) {
          * @param event
          * @param cb
          */
-        on(event, cb) {
+        on(event: keyof EvenlistenerStore, cb: any): SelectionData {
             that._eventListener[event].push(cb);
             return that;
         },
@@ -528,7 +606,7 @@ function Selection(options = {}) {
          * @param event
          * @param cb
          */
-        off(event, cb) {
+        off(event: keyof EvenlistenerStore, cb: any): SelectionData {
             const callBacks = that._eventListener[event];
 
             if (callBacks) {
@@ -546,7 +624,7 @@ function Selection(options = {}) {
          * Can be used if during a selection elements have been added.
          * Will update everything which can be selected.
          */
-        resolveSelectables() {
+        resolveSelectables(): void {
 
             // Resolve selectors
             that._selectables = selectAll(that.options.selectables, that.options.frame);
@@ -556,9 +634,9 @@ function Selection(options = {}) {
          * Saves the current selection for the next selecion.
          * Allows multiple selections.
          */
-        keepSelection() {
+        keepSelection(): void {
             const {_selected, _stored} = that;
-
+            // _stored это Set
             for (let i = 0; i < _selected.length; i++) {
                 const el = _selected[i];
                 if (!_stored.includes(el)) {
@@ -571,7 +649,7 @@ function Selection(options = {}) {
          * Clear the elements which where saved by 'keepSelection()'.
          * @param store If the store should also get cleared
          */
-        clearSelection(store = true) {
+        clearSelection(store: boolean = true): void {
             store && (that._stored = []);
             that._selected = [];
             that._changed.added = [];
@@ -581,7 +659,7 @@ function Selection(options = {}) {
         /**
          * Removes an particular element from the selection.
          */
-        removeFromSelection(el) {
+        removeFromSelection(el: HTMLElement): void {
             that._changed.removed.push(el);
             removeElement(that._stored, el);
             removeElement(that._selected, el);
@@ -590,7 +668,7 @@ function Selection(options = {}) {
         /**
          * @returns {Array} Selected elements
          */
-        getSelection() {
+        getSelection(): HTMLElement[] {
             return that._stored;
         },
 
@@ -598,7 +676,7 @@ function Selection(options = {}) {
          * Cancel the current selection process.
          * @param keepEvent {boolean} true to fire the onStop listener after cancel.
          */
-        cancel(keepEvent = false) {
+        cancel(keepEvent: boolean = false): void {
             that._onTapStop(null, !keepEvent);
         },
 
@@ -608,7 +686,7 @@ function Selection(options = {}) {
          * @param   {*}      value
          * @return  {*}      the new value
          */
-        option(name, value) {
+        option<T extends keyof SelectionOptions>(name: T, value?: SelectionOptions[T]): SelectionOptions[T] {
             const {options} = that;
             return value === undefined ? options[name] : (options[name] = value);
         },
@@ -616,14 +694,14 @@ function Selection(options = {}) {
         /**
          * Disable the selection functinality.
          */
-        disable() {
+        disable(): void {
             that._bindStartEvents('off');
         },
 
         /**
          * Unbinds all events and removes the area-element
          */
-        destroy() {
+        destroy(): void {
             that.disable();
             that._clippingElement.remove();
         },
@@ -631,7 +709,7 @@ function Selection(options = {}) {
         /**
          * Disable the selection functinality.
          */
-        enable() {
+        enable(): void {
             that._bindStartEvents('on');
         },
 
@@ -639,7 +717,7 @@ function Selection(options = {}) {
          * Manually select elements
          * @param query - CSS Query, can be an array of queries
          */
-        select(query) {
+        select(query: string | HTMLElement | (string | HTMLElement)[]): HTMLElement[] {
             const {_selected, _stored, options} = that;
             const elements = selectAll(query, options.frame).filter(el =>
                 !_selected.includes(el) &&
@@ -673,8 +751,8 @@ Selection.utils = {
  * Create selection instance
  * @param {Object} [options]
  */
-Selection.create = options => Selection(options);
+Selection.create = (options: Partial<SelectionOptions>) => Selection(options);
 
 // Set version and export
-Selection.version = version;
+// Selection.version = version;
 export default Selection;

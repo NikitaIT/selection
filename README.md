@@ -47,6 +47,12 @@
     </a>
 </p>
 
+### How it works
+
+<p align="center">
+    <img alt="how it works" src="https://github.com/NikitaIT/selection/blob/master/how-it-works.png">
+</p>
+
 ### Features
 
 - Supports touch devices

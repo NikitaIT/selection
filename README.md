@@ -48,16 +48,18 @@
 </p>
 
 ### Features
-* Supports touch devices
-* Ultra small
-* Highly optimized
-* Simple usage
-* No jQuery
-* Vertical and horizontal scroll support
+
+- Supports touch devices
+- Ultra small
+- Highly optimized
+- Simple usage
+- No jQuery
+- Vertical and horizontal scroll support
 
 ### Install
 
 Via npm
+
 ```
 $ npm install @simonwep/selection-js --save
 ```
@@ -69,70 +71,71 @@ Include via [jsdelivr.net](https://www.jsdelivr.com/)
 ```
 
 ## Usage
+
 ```javascript
 const selection = new Selection({
+  // Class for the selection-area-element
+  class: "selection-area",
 
-    // Class for the selection-area-element
-    class: 'selection-area',
+  // document object - if you want to use it within an embed document (or iframe)
+  frame: document,
 
-    // document object - if you want to use it within an embed document (or iframe)
-    frame: document,
+  // px, how many pixels the point should move before starting the selection (combined distance).
+  // Or specifiy the threshold for each axis by passing an object like {x: <number>, y: <number>}.
+  startThreshold: 10,
 
-    // px, how many pixels the point should move before starting the selection (combined distance).
-    // Or specifiy the threshold for each axis by passing an object like {x: <number>, y: <number>}.
-    startThreshold: 10,
+  // Disable the selection functionality for touch devices
+  disableTouch: false,
 
-    // Disable the selection functionality for touch devices
-    disableTouch: false,
+  // On which point an element should be selected.
+  // Available modes are cover (cover the entire element), center (touch the center) or
+  // the default mode is touch (just touching it).
+  mode: "touch",
 
-    // On which point an element should be selected.
-    // Available modes are cover (cover the entire element), center (touch the center) or
-    // the default mode is touch (just touching it).
-    mode: 'touch',
+  // Behaviour on single-click
+  // Available modes are 'native' (element was mouse-event target) or
+  // 'touch' (element got touched)
+  tapMode: "native",
 
-    // Behaviour on single-click
-    // Available modes are 'native' (element was mouse-event target) or 
-    // 'touch' (element got touched)
-    tapMode: 'native',
+  // Enable single-click selection (Also disables range-selection via shift + ctrl)
+  singleClick: true,
 
-    // Enable single-click selection (Also disables range-selection via shift + ctrl)
-    singleClick: true,
+  // Query selectors from elements which can be selected
+  selectables: [],
 
-    // Query selectors from elements which can be selected
-    selectables: [],
+  // Query selectors for elements from where a selection can be start
+  startareas: ["html"],
 
-    // Query selectors for elements from where a selection can be start
-    startareas: ['html'],
+  // Query selectors for elements which will be used as boundaries for the selection
+  boundaries: ["html"],
 
-    // Query selectors for elements which will be used as boundaries for the selection
-    boundaries: ['html'],
+  // Query selector or dom node to set up container for selection-area-element
+  selectionAreaContainer: "body",
 
-    // Query selector or dom node to set up container for selection-area-element
-    selectionAreaContainer: 'body',
+  // On scrollable areas the number on px per frame is devided by this amount.
+  // Default is 10 to provide a enjoyable scroll experience.
+  scrollSpeedDivider: 10,
 
-    // On scrollable areas the number on px per frame is devided by this amount.
-    // Default is 10 to provide a enjoyable scroll experience.
-    scrollSpeedDivider: 10,
-
-    // Browsers handle mouse-wheel events differently, this number will be used as 
-    // numerator to calculate the mount of px while scrolling manually: manualScrollSpeed / scrollSpeedDivider
-    manualScrollSpeed: 750
+  // Browsers handle mouse-wheel events differently, this number will be used as
+  // numerator to calculate the mount of px while scrolling manually: manualScrollSpeed / scrollSpeedDivider
+  manualScrollSpeed: 750
 });
-
 ```
 
 ## Events
-Since version `1.2.x` selection-js is event-driven. 
+
+Since version `1.2.x` selection-js is event-driven.
 Use the `on(event, cb)` and `off(event, cb)` functions to bind / unbind event-listener.
 
-| Event      | Description
-| -------------- | ----------- | 
-| `beforestart`  | The `mousedown` / `touchstart` got called inside a valid boundary. Return `false` to cancel selection immediatly.  |
-| `start`        | User started the selection, the `startThreshold` got fulfilled. | 
-| `move`         | The user dragged the mouse around. |
-| `stop`         | The user stopped the selection, called on `mouseup` and `touchend` / `touchcancel` after a selection. |
+| Event         | Description                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `beforestart` | The `mousedown` / `touchstart` got called inside a valid boundary. Return `false` to cancel selection immediatly. |
+| `start`       | User started the selection, the `startThreshold` got fulfilled.                                                   |
+| `move`        | The user dragged the mouse around.                                                                                |
+| `stop`        | The user stopped the selection, called on `mouseup` and `touchend` / `touchcancel` after a selection.             |
 
 Every event-object contains the folling properties:
+
 ```js
 {
     oe,   // Original mouse- / touchevent.
@@ -147,49 +150,56 @@ Every event-object contains the folling properties:
 ```
 
 > Example:
+
 ```js
-selection.on('beforestart', evt => {
+selection
+  .on("beforestart", evt => {
     // This function can return "false" to abort the selection
-    console.log('beforestart', evt);
-}).on('start', evt => {
-    console.log('start', evt);
-}).on('move', evt => {
-    console.log('move', evt);
-}).on('stop', evt => {
-    console.log('stop', evt);
-});
+    console.log("beforestart", evt);
+  })
+  .on("start", evt => {
+    console.log("start", evt);
+  })
+  .on("move", evt => {
+    console.log("move", evt);
+  })
+  .on("stop", evt => {
+    console.log("stop", evt);
+  });
 ```
 
 ## Methods
-* selection.on(event`:String`, cb`:Function`) _- Appends an event listener to the given corresponding event-name (see section Events), returns the current instance so it can be chained._
-* selection.off(event`:String`, cb`:Function`) _- Removes an event listener from the given corresponding event-name (see section Events), returns the current instance so it can be chained._
-* selection.option(name`:String`) _- Returns the option by name._
-* selection.option(name`:String`, value`:Mixed`) _- Set a new option value._
-* selection.disable() _- Disable the functionality to make selections._
-* selection.enable() _- Enable the functionality to make selections._
-* selection.destroy() _- Unbinds all events and removes the area-element._
-* selection.cancel() _- Cancels the current selection process._
 
-* selection.trigger(evt`:MouseEvent|TouchEvent`, silent`:boolean`) _- Manually triggers the start of a selection. `silent = true` means that no `beforestart` event will get fired (default)._
-* selection.keepSelection() _- Will save the current selected elements and will append those to the next selection. Can be used to allow multiple selections._
-* selection.clearSelection() _- Clear the previous selection (elements which were saved by `keepSelection()`)._
-* selection.getSelection() _- Returns currently selected elements as an Array._
-* selection.removeFromSelection(el`:HTMLElement`) _- Removes a particular element from the current selection._
-* selection.resolveSelectables() _- Need to be called if during a selection elements have been added._
-* selection.select(query`:[String]|String`) _- Manually appends elements to the selection, can be a / an array of queries / elements. Returns actual selected elements as array._
+- selection.on(event`:String`, cb`:Function`) _- Appends an event listener to the given corresponding event-name (see section Events), returns the current instance so it can be chained._
+- selection.off(event`:String`, cb`:Function`) _- Removes an event listener from the given corresponding event-name (see section Events), returns the current instance so it can be chained._
+- selection.option(name`:String`) _- Returns the option by name._
+- selection.option(name`:String`, value`:Mixed`) _- Set a new option value._
+- selection.disable() _- Disable the functionality to make selections._
+- selection.enable() _- Enable the functionality to make selections._
+- selection.destroy() _- Unbinds all events and removes the area-element._
+- selection.cancel() _- Cancels the current selection process._
+
+- selection.trigger(evt`:MouseEvent|TouchEvent`, silent`:boolean`) _- Manually triggers the start of a selection. `silent = true` means that no `beforestart` event will get fired (default)._
+- selection.keepSelection() _- Will save the current selected elements and will append those to the next selection. Can be used to allow multiple selections._
+- selection.clearSelection() _- Clear the previous selection (elements which were saved by `keepSelection()`)._
+- selection.getSelection() _- Returns currently selected elements as an Array._
+- selection.removeFromSelection(el`:HTMLElement`) _- Removes a particular element from the current selection._
+- selection.resolveSelectables() _- Need to be called if during a selection elements have been added._
+- selection.select(query`:[String]|String`) _- Manually appends elements to the selection, can be a / an array of queries / elements. Returns actual selected elements as array._
 
 ## Static methods
 
 Selection
-* Selection.create(options`:Object`)`:Selection` _- Creates a new instance._
+
+- Selection.create(options`:Object`)`:Selection` _- Creates a new instance._
 
 Selection.utils
 
-* on(el`:HTMLElement`, event`:String`, fn`:Function`[, options `:Object`]) _- Attach an event handler function._
-* off(el`:HTMLElement`, event`:String`, fn`:Function`[, options `:Object`]) _- Remove an event handler._
-* css(el`:HTMLElement`, attr`:String`, val`:String`) _- Set a specific style property._
-* css(el`:HTMLElement`, attr`:Object`) _- Set multiple style properties._
-* intersects(ela`:HTMLElement`, elb`:HTMLElement`)`:Boolean` _- Check if an HTMLElement intersects another._
-* selectAll(selector`:String|Array`)`:Array` _- Returns all HTMLElements which were selected by the selector._
-* eventPath(evt`:DOMEvent`)`:NodeList` _- Event.composedPath() polyfill._
-* removeElement(arr`:Array`, el`:Object`) _- Removes an particular element from an Array._
+- on(el`:HTMLElement`, event`:String`, fn`:Function`[, options `:Object`]) _- Attach an event handler function._
+- off(el`:HTMLElement`, event`:String`, fn`:Function`[, options `:Object`]) _- Remove an event handler._
+- css(el`:HTMLElement`, attr`:String`, val`:String`) _- Set a specific style property._
+- css(el`:HTMLElement`, attr`:Object`) _- Set multiple style properties._
+- intersects(ela`:HTMLElement`, elb`:HTMLElement`)`:Boolean` _- Check if an HTMLElement intersects another._
+- selectAll(selector`:String|Array`)`:Array` _- Returns all HTMLElements which were selected by the selector._
+- eventPath(evt`:DOMEvent`)`:NodeList` _- Event.composedPath() polyfill._
+- removeElement(arr`:Array`, el`:Object`) _- Removes an particular element from an Array._

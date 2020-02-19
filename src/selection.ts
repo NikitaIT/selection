@@ -17,7 +17,7 @@ import {
   unitify
 } from "./utils";
 // @ts-ignore
-//import {version} from '../package';
+import { version } from "../package.json";
 
 // Some var shorting for better compression and readability
 const { abs, max, min, round, ceil, sign } = Math;
@@ -132,13 +132,13 @@ type SelectionData = {
   select(query: string | HTMLElement | (string | HTMLElement)[]): HTMLElement[];
 } & KeepSelectionStore;
 function Selection(options: Partial<SelectionOptions> = {}) {
-  const areaStartPoint = {
-    _ax1: 0,
-    _ay1: 0
+  const areaStartPoint: Point = {
+    x: 0,
+    y: 0
   };
-  const areaEndPoint = {
-    _ax2: 0,
-    _ay2: 0
+  const areaEndPoint: Point = {
+    x: 0,
+    y: 0
   };
   const that: SelectionData = {
     // >- новые?
@@ -227,12 +227,12 @@ function Selection(options: Partial<SelectionOptions> = {}) {
       }
 
       // Area start point
-      areaStartPoint._ax1 = x;
-      areaStartPoint._ay1 = y;
+      areaStartPoint.x = x;
+      areaStartPoint.y = y;
 
       // Area end point
-      areaEndPoint._ax2 = 0;
-      areaEndPoint._ay2 = 0;
+      areaEndPoint.x = 0;
+      areaEndPoint.y = 0;
 
       // To detect single-click
       that._singleClick = true;
@@ -331,10 +331,12 @@ function Selection(options: Partial<SelectionOptions> = {}) {
 
     _delayedTapMove(evt: SupportedEvent): void {
       // Check pixel threshold
-      function isMoreWhenThreshold() {
-        const { startThreshold } = that.options;
+      function isMoreWhenThreshold(
+        evt: SupportedEvent,
+        { startThreshold }: SelectionOptions,
+        { x: _ax1, y: _ay1 }: Point
+      ) {
         const { x, y } = simplifyEvent(evt);
-        const { _ax1, _ay1 } = areaStartPoint; // Coordinates of first "tap"
         return (
           (typeof startThreshold === "number" &&
             abs(x + y - (_ax1 + _ay1)) >= startThreshold) ||
@@ -343,7 +345,7 @@ function Selection(options: Partial<SelectionOptions> = {}) {
               abs(y - _ay1) >= startThreshold.y))
         );
       }
-      if (isMoreWhenThreshold()) {
+      if (isMoreWhenThreshold(evt, that.options, areaStartPoint)) {
         that.__delayedTapMove(evt);
       }
 
@@ -442,8 +444,8 @@ function Selection(options: Partial<SelectionOptions> = {}) {
       const { scrollSpeedDivider } = that.options;
       const scon = that._targetContainer;
       let ss = that._scrollSpeed;
-      areaEndPoint._ax2 = x;
-      areaEndPoint._ay2 = y;
+      areaEndPoint.x = x;
+      areaEndPoint.y = y;
 
       if (that._scrollAvailable && (ss.y !== null || ss.x !== null)) {
         // Continous scrolling
@@ -467,12 +469,12 @@ function Selection(options: Partial<SelectionOptions> = {}) {
           // Reduce velocity, use ceil in both directions to scroll at least 1px per frame
           if (scrollY) {
             scon.scrollTop += ceil(ss.y / scrollSpeedDivider);
-            areaStartPoint._ay1 -= scon.scrollTop - scrollTop;
+            areaStartPoint.y -= scon.scrollTop - scrollTop;
           }
 
           if (scrollX) {
             scon.scrollLeft += ceil(ss.x / scrollSpeedDivider);
-            areaStartPoint._ax1 -= scon.scrollLeft - scrollLeft;
+            areaStartPoint.x -= scon.scrollLeft - scrollLeft;
           }
 
           /**
@@ -525,8 +527,7 @@ function Selection(options: Partial<SelectionOptions> = {}) {
         clientWidth
       } = that._targetContainer;
       const brect = that._targetBoundary;
-      let x = areaEndPoint._ax2;
-      let y = areaEndPoint._ay2;
+      let { x, y } = areaEndPoint;
       [ss.x, x] = scrollSpeedWithNewCoord(
         x,
         brect.left,
@@ -544,10 +545,10 @@ function Selection(options: Partial<SelectionOptions> = {}) {
         clientHeight
       );
 
-      const x3 = min(areaStartPoint._ax1, x);
-      const y3 = min(areaStartPoint._ay1, y);
-      const x4 = max(areaStartPoint._ax1, x);
-      const y4 = max(areaStartPoint._ay1, y);
+      const x3 = min(areaStartPoint.x, x);
+      const y3 = min(areaStartPoint.y, y);
+      const x4 = max(areaStartPoint.x, x);
+      const y4 = max(areaStartPoint.y, y);
       const width = x4 - x3;
       const height = y4 - y3;
 
@@ -815,5 +816,5 @@ Selection.utils = {
 Selection.create = (options: Partial<SelectionOptions>) => Selection(options);
 
 // Set version and export
-// Selection.version = version;
+Selection.version = version;
 export default Selection;

@@ -4,7 +4,7 @@ const webpack = require('webpack');
 
 module.exports = {
     mode: 'production',
-    entry: './src/selection.js',
+    entry: './src/selection.ts',
 
     output: {
         path: `${__dirname}/dist`,
@@ -17,6 +17,18 @@ module.exports = {
 
     module: {
         rules: [
+		        {
+			          test: /\.ts?$/,
+                use: [
+                    {
+                        loader: 'babel-loader'
+                    },
+                    {
+                        loader: 'ts-loader'
+                    },
+                ],
+			          exclude: /node_modules/
+		        },
             {
                 test: /\.js$/,
                 loader: [
@@ -26,6 +38,9 @@ module.exports = {
             }
         ]
     },
+		resolve: {
+			extensions: [ '.ts', '.js' ]
+		},
 
     plugins: [
         new webpack.SourceMapDevToolPlugin({

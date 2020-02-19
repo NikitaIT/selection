@@ -5,7 +5,7 @@
     },
     "extends": [
         "eslint:recommended",
-        "simon"
+        "plugin:prettier/recommended"
     ],
     "parserOptions": {
         "ecmaVersion": 2018,
